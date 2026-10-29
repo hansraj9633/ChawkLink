@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'contractor_theme.dart';
 import 'post_job_screen.dart';
+import 'job_applications_screen.dart';
 
 class ContractorHomeTab extends StatelessWidget {
   const ContractorHomeTab({super.key, required this.onOpenJobs});
@@ -82,10 +83,10 @@ class ContractorHomeTab extends StatelessWidget {
           },
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Manage your jobs and find the right workers.',
-          style: TextStyle(color: Colors.black54),
-        ),
+        // const Text(
+        //   'Manage your jobs and find the right workers.',
+        //   style: TextStyle(color: Colors.black54),
+        // ),
         const SizedBox(height: 22),
         SizedBox(
           height: 54,
@@ -226,59 +227,92 @@ class ContractorHomeTab extends StatelessWidget {
             return Column(
               children: docs.take(3).map((doc) {
                 final data = doc.data();
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Material(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: const Color(0xFFE7ECE8)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(15),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => JobApplicantsScreen(
+                              jobId: doc.id,
+                              jobTitle:
+                                  data['title']?.toString() ?? 'Untitled job',
+                              location:
+                                  data['location']?.toString() ??
+                                  'Location not specified',
+                              wage: data['wageAmount'] is num
+                                  ? data['wageAmount'] as num
+                                  : null,
+                              wageType: data['wageType']?.toString() ?? 'Daily',
+                              postedAt: data['createdAt'] is Timestamp
+                                  ? (data['createdAt'] as Timestamp).toDate()
+                                  : null,
+                              requiredWorkers:
+                                  (data['workersNeeded'] as num?)?.toInt() ?? 1,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFDDF1E5),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: const Color(0xFFE7ECE8)),
                         ),
-                        child: const Icon(
-                          Icons.work_outline,
-                          color: contractorGreen,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            Text(
-                              data['title']?.toString() ?? 'Untitled job',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: contractorDarkGreen,
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDDF1E5),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.work_outline,
+                                color: contractorGreen,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    data['title']?.toString() ?? 'Untitled job',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: contractorDarkGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    data['location']?.toString() ??
+                                        'Location not specified',
+                                    style: const TextStyle(
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             Text(
-                              data['location']?.toString() ??
-                                  'Location not specified',
-                              style: const TextStyle(color: Colors.black54),
+                              (data['status'] ?? 'open').toString(),
+                              style: TextStyle(
+                                color: (data['status'] ?? 'open') == 'open'
+                                    ? contractorGreen
+                                    : Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        (data['status'] ?? 'open').toString(),
-                        style: TextStyle(
-                          color: (data['status'] ?? 'open') == 'open'
-                              ? contractorGreen
-                              : Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 );
               }).toList(),

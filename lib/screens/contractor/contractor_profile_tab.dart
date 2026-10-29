@@ -41,30 +41,218 @@ class ContractorProfileTab extends StatelessWidget {
     );
   }
 
-  Future<void> _editProfile(
+  Future<void> _editPersonalInformation(
     BuildContext context,
     String uid,
-    Map<String, dynamic> data,
+    String currentName,
+    String currentEmail,
   ) async {
+    final formKey = GlobalKey<FormState>();
+    String editedName = currentName;
+    String editedEmail = currentEmail == 'Not provided' ? '' : currentEmail;
+
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (_) => _EditContractorProfileDialog(data: data),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Personal Information'),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: currentName,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Full name *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Name is required.';
+                    }
+                    return null;
+                  },
+                  onSaved: (value) => editedName = value!.trim(),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  initialValue: editedEmail,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email address (optional)',
+                    hintText: 'Enter email or leave blank',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  validator: (value) {
+                    final email = value?.trim() ?? '';
+
+                    // Email is optional.
+                    if (email.isEmpty) return null;
+
+                    if (!RegExp(
+                      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                    ).hasMatch(email)) {
+                      return 'Enter a valid email address.';
+                    }
+
+                    return null;
+                  },
+                  onSaved: (value) => editedEmail = value?.trim() ?? '',
+                ),
+                const SizedBox(height: 8),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '* Required field',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+
+              formKey.currentState!.save();
+
+              Navigator.pop(dialogContext, {
+                'name': editedName,
+                'email': editedEmail,
+              });
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || !context.mounted) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'name': result['name'],
+        'email': result['email'],
+      });
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Personal information updated successfully.'),
+          backgroundColor: contractorGreen,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update information: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editWorkPreferences(
+    BuildContext context,
+    String uid,
+    String businessName,
+    String operatingArea,
+  ) async {
+    final businessController = TextEditingController(
+      text: businessName == 'Not added' ? '' : businessName,
+    );
+    final areaController = TextEditingController(
+      text: operatingArea == 'Not added' ? '' : operatingArea,
+    );
+
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Work Preferences'),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: businessController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Business name',
+                    prefixIcon: Icon(Icons.business_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: areaController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Operating area',
+                    hintText: 'e.g. Jharia, Dhanbad',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter your operating area.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+
+              Navigator.pop(dialogContext, {
+                'businessName': businessController.text.trim(),
+                'operatingArea': areaController.text.trim(),
+              });
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
     );
 
     if (result == null || !context.mounted) return;
 
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': result['name']!.trim(),
-        'businessName': result['businessName']!.trim(),
-        'operatingArea': result['operatingArea']!.trim(),
+        'businessName': result['businessName'],
+        'operatingArea': result['operatingArea'],
       }, SetOptions(merge: true));
 
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Profile updated successfully.'),
+          content: Text('Work preferences updated successfully.'),
           backgroundColor: contractorGreen,
         ),
       );
@@ -73,7 +261,7 @@ class ContractorProfileTab extends StatelessWidget {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not update profile. Please try again.'),
+          content: Text('Could not update work preferences.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -94,23 +282,13 @@ class ContractorProfileTab extends StatelessWidget {
     final jobs = results[0].docs;
     final applications = results[1].docs;
 
-    final openJobs = jobs.where((job) {
-      return job.data()['status'] == 'open';
-    }).length;
-
-    final closedJobs = jobs.where((job) {
-      return job.data()['status'] == 'closed';
-    }).length;
-
-    final acceptedApplications = applications.where((application) {
-      return application.data()['status'] == 'accepted';
-    }).length;
-
     return {
       'total': jobs.length,
-      'open': openJobs,
-      'closed': closedJobs,
-      'workers': acceptedApplications,
+      'open': jobs.where((job) => job.data()['status'] == 'open').length,
+      'closed': jobs.where((job) => job.data()['status'] == 'closed').length,
+      'workers': applications
+          .where((app) => app.data()['status'] == 'accepted')
+          .length,
     };
   }
 
@@ -150,32 +328,32 @@ class ContractorProfileTab extends StatelessWidget {
           }
 
           final data = snapshot.data?.data() ?? {};
-          final name = data['name']?.toString().trim().isNotEmpty == true
-              ? data['name'].toString()
-              : 'Contractor';
 
-          final phone = data['phone']?.toString().trim().isNotEmpty == true
-              ? data['phone'].toString()
+          final storedName = data['name']?.toString().trim() ?? '';
+          final name = storedName.isNotEmpty ? storedName : 'Contractor';
+
+          final storedPhone = data['phone']?.toString().trim() ?? '';
+          final phone = storedPhone.isNotEmpty
+              ? storedPhone
               : user.phoneNumber ?? 'Not provided';
 
-          final email = data['email']?.toString().trim().isNotEmpty == true
-              ? data['email'].toString()
-              : user.email ?? 'Not provided';
+          final storedEmail = data['email']?.toString().trim() ?? '';
+          final email = storedEmail.isNotEmpty ? storedEmail : 'Not provided';
 
-          final businessName =
-              data['businessName']?.toString().trim().isNotEmpty == true
-              ? data['businessName'].toString()
+          final storedBusiness = data['businessName']?.toString().trim() ?? '';
+          final businessName = storedBusiness.isNotEmpty
+              ? storedBusiness
               : 'Not added';
 
-          final operatingArea =
-              data['operatingArea']?.toString().trim().isNotEmpty == true
-              ? data['operatingArea'].toString()
+          final storedArea = data['operatingArea']?.toString().trim() ?? '';
+          final operatingArea = storedArea.isNotEmpty
+              ? storedArea
               : 'Not added';
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
             children: [
-              // Profile header
+              // Profile header: initials only, no photo upload.
               Container(
                 padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
@@ -188,9 +366,7 @@ class ContractorProfileTab extends StatelessWidget {
                       radius: 43,
                       backgroundColor: const Color(0xFFDDF1E5),
                       child: Text(
-                        name.trim().isNotEmpty
-                            ? name.trim()[0].toUpperCase()
-                            : 'C',
+                        name.isNotEmpty ? name[0].toUpperCase() : 'C',
                         style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
@@ -246,165 +422,212 @@ class ContractorProfileTab extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => _editProfile(context, user.uid, data),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: contractorDarkGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                        ),
-                        icon: const Icon(Icons.edit_outlined, size: 19),
-                        label: const Text(
-                          'Edit Profile',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              const _SectionHeading(
-                title: 'My Activity',
-                subtitle: 'An overview of your job listings and workers',
-              ),
-
-              const SizedBox(height: 14),
-
-              FutureBuilder<Map<String, int>>(
-                future: _loadStats(user.uid),
-                builder: (context, statsSnapshot) {
-                  if (statsSnapshot.hasError) {
-                    return const Text(
-                      'Unable to load activity statistics.',
-                      style: TextStyle(color: Colors.black54),
-                    );
-                  }
-
-                  if (!statsSnapshot.hasData) {
-                    return const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-
-                  final stats = statsSnapshot.data!;
-
-                  return Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatCard(
-                              title: 'Total Jobs',
-                              value: stats['total']!,
-                              icon: Icons.work_outline_rounded,
-                              color: contractorGreen,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _StatCard(
-                              title: 'Open Jobs',
-                              value: stats['open']!,
-                              icon: Icons.work_history_outlined,
-                              color: Colors.blue.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatCard(
-                              title: 'Closed Jobs',
-                              value: stats['closed']!,
-                              icon: Icons.task_alt_rounded,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _StatCard(
-                              title: 'Accepted Apps',
-                              value: stats['workers']!,
-                              icon: Icons.groups_outlined,
-                              color: contractorDarkGreen,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-
-              const SizedBox(height: 26),
-
-              const _SectionHeading(
+              // Personal Information
+              _ExpandableSection(
+                icon: Icons.person_outline_rounded,
                 title: 'Personal Information',
-                subtitle: 'Your contact and business details',
+                subtitle: 'Your contact details',
+                children: [
+                  _ProfileLine(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Full name',
+                    value: name,
+                  ),
+                  const Divider(height: 24),
+                  _ProfileLine(
+                    icon: Icons.phone_outlined,
+                    label: 'Phone number',
+                    value: phone,
+                  ),
+                  const Divider(height: 24),
+                  _ProfileLine(
+                    icon: Icons.email_outlined,
+                    label: 'Email address',
+                    value: email,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _editPersonalInformation(
+                        context,
+                        user.uid,
+                        name,
+                        email,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit Information'),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Note: Phone Number can\'t be changed for now!',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE7ECE8)),
-                ),
-                child: Column(
-                  children: [
-                    _ProfileLine(
-                      icon: Icons.person_outline_rounded,
-                      label: 'Full name',
-                      value: name,
+              // Work Preferences
+              _ExpandableSection(
+                icon: Icons.business_center_outlined,
+                title: 'Work Preferences',
+                subtitle: 'Your business and operating area',
+                children: [
+                  _ProfileLine(
+                    icon: Icons.business_outlined,
+                    label: 'Business name',
+                    value: businessName,
+                  ),
+                  const Divider(height: 24),
+                  _ProfileLine(
+                    icon: Icons.location_on_outlined,
+                    label: 'Operating area',
+                    value: operatingArea,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _editWorkPreferences(
+                        context,
+                        user.uid,
+                        businessName,
+                        operatingArea,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit Work Preferences'),
                     ),
-                    const Divider(height: 24),
-                    _ProfileLine(
-                      icon: Icons.phone_outlined,
-                      label: 'Phone number',
-                      value: phone,
-                    ),
-                    const Divider(height: 24),
-                    _ProfileLine(
-                      icon: Icons.email_outlined,
-                      label: 'Email address',
-                      value: email,
-                    ),
-                    const Divider(height: 24),
-                    _ProfileLine(
-                      icon: Icons.business_outlined,
-                      label: 'Business name',
-                      value: businessName,
-                    ),
-                    const Divider(height: 24),
-                    _ProfileLine(
-                      icon: Icons.location_on_outlined,
-                      label: 'Operating area',
-                      value: operatingArea,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 26),
+              const SizedBox(height: 12),
 
-              const _SectionHeading(
-                title: 'Account',
-                subtitle: 'Manage your ChawkLink account',
+              // My Activities
+              _ExpandableSection(
+                icon: Icons.analytics_outlined,
+                title: 'My Activities',
+                subtitle: 'Overview of your jobs and workers',
+                children: [
+                  FutureBuilder<Map<String, int>>(
+                    future: _loadStats(user.uid),
+                    builder: (context, statsSnapshot) {
+                      if (statsSnapshot.hasError) {
+                        return const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text('Unable to load activity statistics.'),
+                        );
+                      }
+
+                      if (!statsSnapshot.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
+                      final stats = statsSnapshot.data!;
+
+                      return Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Total Jobs',
+                                  value: stats['total']!,
+                                  icon: Icons.work_outline_rounded,
+                                  color: contractorGreen,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Open Jobs',
+                                  value: stats['open']!,
+                                  icon: Icons.work_history_outlined,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Closed Jobs',
+                                  value: stats['closed']!,
+                                  icon: Icons.task_alt_rounded,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Accepted Apps',
+                                  value: stats['workers']!,
+                                  icon: Icons.groups_outlined,
+                                  color: contractorDarkGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
+              // Privacy Policy
+              _ExpandableSection(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'How ChawkLink handles your information',
+                children: const [
+                  Text(
+                    'ChawkLink uses the information you provide to '
+                    'support your account and job-related activities.',
+                    style: TextStyle(height: 1.5),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Profile details and job application information '
+                    'are stored in the app’s connected services and '
+                    'are made available according to account permissions.',
+                    style: TextStyle(height: 1.5),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Keep your account credentials secure. Contact '
+                    'the ChawkLink team for questions about your data '
+                    'or privacy.',
+                    style: TextStyle(height: 1.5),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Note: This is an in-app informational summary, '
+                    'not a substitute for the official published '
+                    'privacy policy.',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Logout
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -453,147 +676,52 @@ class ContractorProfileTab extends StatelessWidget {
   }
 }
 
-class _EditContractorProfileDialog extends StatefulWidget {
-  const _EditContractorProfileDialog({required this.data});
+class _ExpandableSection extends StatelessWidget {
+  const _ExpandableSection({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
 
-  final Map<String, dynamic> data;
-
-  @override
-  State<_EditContractorProfileDialog> createState() =>
-      _EditContractorProfileDialogState();
-}
-
-class _EditContractorProfileDialogState
-    extends State<_EditContractorProfileDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _businessController;
-  late final TextEditingController _areaController;
-  final _formKey = GlobalKey<FormState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(
-      text: widget.data['name']?.toString() ?? '',
-    );
-    _businessController = TextEditingController(
-      text: widget.data['businessName']?.toString() ?? '',
-    );
-    _areaController = TextEditingController(
-      text: widget.data['operatingArea']?.toString() ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _businessController.dispose();
-    _areaController.dispose();
-    super.dispose();
-  }
-
-  String? _validateRequired(String? value, String label) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter $label.';
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit Profile'),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Full name *',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => _validateRequired(value, 'your name'),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _businessController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Business name',
-                  prefixIcon: Icon(Icons.business_outlined),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _areaController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Operating area *',
-                  hintText: 'e.g. Japla, Palamu',
-                  prefixIcon: Icon(Icons.location_on_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    _validateRequired(value, 'your operating area'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-
-            Navigator.pop(context, {
-              'name': _nameController.text,
-              'businessName': _businessController.text,
-              'operatingArea': _areaController.text,
-            });
-          },
-          style: FilledButton.styleFrom(backgroundColor: contractorGreen),
-          child: const Text('Save Changes'),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, required this.subtitle});
-
+  final IconData icon;
   final String title;
   final String subtitle;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.bold,
-            color: contractorDarkGreen,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE7ECE8)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDDF1E5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: contractorGreen),
           ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: contractorDarkGreen,
+              fontSize: 15,
+            ),
+          ),
+          subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+          children: children,
         ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: const TextStyle(fontSize: 12, color: Colors.black54),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -614,17 +742,17 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
+        color: contractorBackground,
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(color: const Color(0xFFE7ECE8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 25),
-          const SizedBox(height: 14),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 12),
           Text(
             '$value',
             style: const TextStyle(
@@ -633,7 +761,7 @@ class _StatCard extends StatelessWidget {
               color: contractorDarkGreen,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
             title,
             style: const TextStyle(fontSize: 12, color: Colors.black54),

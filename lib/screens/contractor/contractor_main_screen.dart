@@ -18,7 +18,7 @@ class _ContractorMainScreenState extends State<ContractorMainScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      ContractorHomeTab(onOpenJobs: () => setState(() => selectedIndex = 1)),
+      ContractorHomeTab(onOpenJobs: () => setState(() => selectedIndex = 2)),
       const ContractorJobsTab(),
       const ContractorApplicationsTab(),
       const ContractorProfileTab(),

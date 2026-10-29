@@ -31,6 +31,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
   String _jobType = 'Daily wage';
   String _wageType = 'Daily';
   bool _saving = false;
+  DateTime? _visibilityStart;
+  DateTime? _applicationDeadline;
 
   @override
   void initState() {
@@ -40,6 +42,18 @@ class _PostJobScreenState extends State<PostJobScreen> {
 
     final data = widget.initialData;
     if (data == null) return;
+
+    DateTime? readDateTime(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
+    _visibilityStart = readDateTime(data['startAt']) ?? DateTime.now();
+    _applicationDeadline =
+        readDateTime(data['applicationDeadline']) ??
+        DateTime.now().add(const Duration(days: 7));
 
     _title.text = data['title']?.toString() ?? '';
     _category.text = data['category']?.toString() ?? '';
@@ -121,6 +135,37 @@ class _PostJobScreenState extends State<PostJobScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_visibilityStart == null || _applicationDeadline == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select both the visibility start and application deadline.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!_applicationDeadline!.isAfter(_visibilityStart!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Application deadline must be after the visibility start.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!widget.isEditing && _visibilityStart!.isBefore(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Visibility start cannot be in the past.'),
+        ),
+      );
+      return;
+    }
+
     if (_preferredGenders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select Male, Female, or both.')),
@@ -152,6 +197,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
         'workDates': _workDates.toList()..sort(),
         'preferredGender': _preferredGenders.toList()..sort(),
         'contactPhone': _contactPhone.text.trim(),
+        'startAt': Timestamp.fromDate(_visibilityStart!),
+        'applicationDeadline': Timestamp.fromDate(_applicationDeadline!),
       };
 
       final jobs = FirebaseFirestore.instance.collection('jobs');
@@ -194,6 +241,99 @@ class _PostJobScreenState extends State<PostJobScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Select date and time';
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+    return '$day/$month/${dateTime.year} • $hour:$minute $period';
+  }
+
+  Future<void> _pickDateTime({required bool isStart}) async {
+    final now = DateTime.now();
+    final current = isStart ? _visibilityStart : _applicationDeadline;
+    final initial = current ?? now.add(const Duration(hours: 1));
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateUtils.dateOnly(initial).isBefore(DateUtils.dateOnly(now))
+          ? DateUtils.dateOnly(now)
+          : DateUtils.dateOnly(initial),
+      firstDate: DateUtils.dateOnly(now),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null || !mounted) return;
+
+    final selected = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    setState(() {
+      if (isStart) {
+        _visibilityStart = selected;
+        if (_applicationDeadline == null ||
+            !_applicationDeadline!.isAfter(selected)) {
+          _applicationDeadline = selected.add(const Duration(days: 1));
+        }
+      } else {
+        _applicationDeadline = selected;
+      }
+    });
+  }
+
+  Widget _visibilityDateField({
+    required String title,
+    required String description,
+    required DateTime? value,
+    required VoidCallback onTap,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: contractorDarkGreen,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          description,
+          style: const TextStyle(color: Colors.black54, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _saving ? null : onTap,
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: Text(
+            _formatDateTime(value),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: contractorGreen,
+            side: const BorderSide(color: contractorGreen),
+            minimumSize: const Size(double.infinity, 48),
+            alignment: Alignment.centerLeft,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _genderOption(String gender, IconData icon) {
@@ -691,6 +831,61 @@ class _PostJobScreenState extends State<PostJobScreen> {
               style: TextStyle(color: Colors.black54, fontSize: 12),
             ),
             const SizedBox(height: 18),
+
+            // Job visibility and application deadline
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: contractorGreen.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.schedule, color: contractorGreen),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Job visibility period',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: contractorDarkGreen,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Choose when workers can start seeing this job and the deadline for new applications.',
+                    style: TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+                  _visibilityDateField(
+                    title: 'Visibility starts',
+                    description:
+                        'The job becomes visible to workers from this date and time.',
+                    value: _visibilityStart,
+                    onTap: () => _pickDateTime(isStart: true),
+                  ),
+                  const SizedBox(height: 12),
+                  _visibilityDateField(
+                    title: 'Application deadline',
+                    description:
+                        'New applications close after this date and time.',
+                    value: _applicationDeadline,
+                    onTap: () => _pickDateTime(isStart: false),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Work dates calendar
             Container(

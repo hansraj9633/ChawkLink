@@ -465,14 +465,30 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
                         builder: (context, workerSnapshot) {
                           final worker = workerSnapshot.data?.data() ?? {};
 
-                          final name = _readValue(worker['name'], 'Worker');
-                          final phone = _readValue(worker['phone'], '');
-                          final email = _readValue(worker['email'], '');
+                          final name = _readValue(
+                            worker['name'],
+                            _readValue(data['applicantName'], 'Worker'),
+                          );
+
+                          final phone = _readValue(
+                            worker['phone'],
+                            _readValue(data['applicantPhone'], ''),
+                          );
+
+                          final email = _readValue(
+                            worker['email'],
+                            _readValue(data['applicantEmail'], ''),
+                          );
+
                           final workArea = _readValue(
                             worker['preferredWorkArea'],
-                            '',
+                            _readValue(data['applicantPreferredWorkArea'], ''),
                           );
-                          final skills = _readValue(worker['skills'], '');
+
+                          final skills = _readValue(
+                            worker['skills'],
+                            _readValue(data['applicantSkills'], ''),
+                          );
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

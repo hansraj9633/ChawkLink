@@ -7,6 +7,72 @@ const _profileGreen = Color(0xFF006B43);
 const _profileDarkGreen = Color(0xFF064A32);
 const _profileBackground = Color(0xFFF7F9F7);
 
+class _ExpandableSection extends StatefulWidget {
+  const _ExpandableSection({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  State<_ExpandableSection> createState() => _ExpandableSectionState();
+}
+
+class _ExpandableSectionState extends State<_ExpandableSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4EAE5)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(widget.icon, color: _profileGreen),
+            title: Text(
+              widget.title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: _profileDarkGreen,
+              ),
+            ),
+            subtitle: Text(widget.subtitle),
+            trailing: Icon(
+              _expanded ? Icons.keyboard_arrow_up : Icons.chevron_right,
+              color: _profileGreen,
+            ),
+            onTap: () => setState(() => _expanded = !_expanded),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.children,
+              ),
+            ),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 180),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class WorkerProfileTab extends StatelessWidget {
   const WorkerProfileTab({super.key});
 
@@ -65,6 +131,7 @@ class WorkerProfileTab extends StatelessWidget {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
                   children: [
+                    // Profile header: no edit button here, matching Contractor Profile.
                     Container(
                       padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
@@ -103,63 +170,136 @@ class WorkerProfileTab extends StatelessWidget {
                             'Worker account',
                             style: TextStyle(color: Colors.black54),
                           ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () =>
-                                  _editProfile(context, user.uid, data),
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Edit profile'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _profileGreen,
-                                side: const BorderSide(color: _profileGreen),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 13,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(13),
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    _sectionCard(
-                      title: 'Personal information',
+                    const SizedBox(height: 14),
+                    _ExpandableSection(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Personal Information',
+                      subtitle: 'Your name and contact details',
                       children: [
                         _detailRow(Icons.person_outline, 'Full name', name),
+                        const Divider(height: 12),
                         _detailRow(
                           Icons.phone_outlined,
                           'Mobile number',
                           phone,
                         ),
+                        const Divider(height: 12),
                         _detailRow(
                           Icons.email_outlined,
                           'Email address',
                           email,
                         ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _editProfile(context, user.uid, data),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Edit Information'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _profileGreen,
+                              side: const BorderSide(color: _profileGreen),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Phone number cannot be changed here.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    _sectionCard(
-                      title: 'Work preferences',
+                    const SizedBox(height: 12),
+                    _ExpandableSection(
+                      icon: Icons.business_center_outlined,
+                      title: 'Work Preferences',
+                      subtitle: 'Your skills and preferred work area',
                       children: [
                         _detailRow(
                           Icons.construction_outlined,
                           'Skills / work type',
                           skills,
                         ),
+                        const Divider(height: 12),
                         _detailRow(
                           Icons.location_on_outlined,
                           'Preferred work area',
                           area,
                         ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _editProfile(context, user.uid, data),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Edit Work Preferences'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _profileGreen,
+                              side: const BorderSide(color: _profileGreen),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
+                    _ExpandableSection(
+                      icon: Icons.history_rounded,
+                      title: 'My Activities & History',
+                      subtitle: 'View your applications and activity records',
+                      children: const [
+                        Text(
+                          'Your job and application history will be shown here. This section is read-only; records cannot be edited or deleted.',
+                          style: TextStyle(color: Colors.black54, height: 1.4),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _ExpandableSection(
+                      icon: Icons.help_outline_rounded,
+                      title: 'Queries & Support',
+                      subtitle: 'Get help with your ChawkLink account',
+                      children: const [
+                        Text(
+                          'Support contact options will be added here.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _ExpandableSection(
+                      icon: Icons.rate_review_outlined,
+                      title: 'Feedback',
+                      subtitle: 'Tell us how we can improve ChawkLink',
+                      children: const [
+                        Text(
+                          'Feedback submission will be added here.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _ExpandableSection(
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacy Policy',
+                      subtitle: 'How your information is handled',
+                      children: const [
+                        Text(
+                          'Privacy policy content will be added here.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -194,35 +334,6 @@ class WorkerProfileTab extends StatelessWidget {
   static String _value(dynamic value, String fallback) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? fallback : text;
-  }
-
-  static Widget _sectionCard({
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4EAE5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: _profileDarkGreen,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    );
   }
 
   static Widget _detailRow(IconData icon, String label, String value) {

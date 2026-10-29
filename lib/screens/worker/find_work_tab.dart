@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'worker_theme.dart';
+import 'dart:async';
 
 class FindWorkTab extends StatefulWidget {
   const FindWorkTab({super.key});
@@ -12,18 +13,48 @@ class FindWorkTab extends StatefulWidget {
 }
 
 class _FindWorkTabState extends State<FindWorkTab> {
+  Timer? _visibilityRefreshTimer;
+
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _applicationsStream;
+
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _jobsStream;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    _applicationsStream = FirebaseFirestore.instance
+        .collection('applications')
+        .where('applicantId', isEqualTo: uid)
+        .snapshots();
+
+    _jobsStream = FirebaseFirestore.instance
+        .collection('jobs')
+        .where('status', isEqualTo: 'open')
+        .snapshots();
+
+    _visibilityRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _visibilityRefreshTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _locationFilter = '';
   String _jobTypeFilter = 'Any';
   double _minWage = 0;
   double _maxWage = 3000;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   String _text(dynamic value, [String fallback = '']) =>
       value?.toString() ?? fallback;
@@ -93,7 +124,27 @@ class _FindWorkTabState extends State<FindWorkTab> {
     }
   }
 
+  DateTime? _readJobDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  bool _isVisibleNow(Map<String, dynamic> job, {DateTime? now}) {
+    final currentTime = now ?? DateTime.now();
+    final startAt = _readJobDateTime(job['startAt']);
+    final deadline = _readJobDateTime(job['applicationDeadline']);
+
+    // Hide jobs that don't have a valid visibility window. New posts must
+    // contain both timestamps; contractors can edit older posts to add them.
+    if (startAt == null || deadline == null) return false;
+    return !currentTime.isBefore(startAt) && currentTime.isBefore(deadline);
+  }
+
   bool _matchesJob(Map<String, dynamic> job) {
+    if (!_isVisibleNow(job)) return false;
+
     final title = _text(job['title'], 'Untitled job');
     final category = _text(job['category'], 'General work');
     final description = _text(job['description']);
@@ -301,6 +352,19 @@ class _FindWorkTabState extends State<FindWorkTab> {
       return;
     }
 
+    // Recheck the window at the moment of applying, in case the job detail
+    // sheet was opened before the start time or left open past the deadline.
+    if (!_isVisibleNow(job)) {
+      if (mounted && sheetContext.mounted) {
+        ScaffoldMessenger.of(sheetContext).showSnackBar(
+          const SnackBar(
+            content: Text('This job is not accepting applications right now.'),
+          ),
+        );
+      }
+      return;
+    }
+
     final contractorId = job['contractorId']?.toString();
 
     if (contractorId == null || contractorId.isEmpty) {
@@ -344,14 +408,12 @@ class _FindWorkTabState extends State<FindWorkTab> {
       ScaffoldMessenger.of(sheetContext).showSnackBar(
         SnackBar(content: Text('Application failed: ${e.message ?? e.code}')),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted || !sheetContext.mounted) return;
 
-      ScaffoldMessenger.of(sheetContext).showSnackBar(
-        const SnackBar(
-          content: Text('Something went wrong. Please try again.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        sheetContext,
+      ).showSnackBar(SnackBar(content: Text('Something went wrong: $e')));
     }
   }
 
@@ -583,232 +645,268 @@ class _FindWorkTabState extends State<FindWorkTab> {
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('jobs')
-                  .where('status', isEqualTo: 'open')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
+              stream: _applicationsStream,
+              builder: (context, applicationSnapshot) {
+                if (applicationSnapshot.hasError) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
-                        'Unable to load jobs. Please check your connection and try again.',
+                        'Unable to check your applications. Please try again.',
                         textAlign: TextAlign.center,
                       ),
                     ),
                   );
                 }
-                if (snapshot.connectionState == ConnectionState.waiting) {
+
+                if (applicationSnapshot.connectionState ==
+                    ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final documents = snapshot.data?.docs ?? [];
-                final jobs = documents
-                    .where((doc) => _matchesJob(doc.data()))
-                    .toList();
-                if (jobs.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.work_off_outlined,
-                            size: 60,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            documents.isEmpty
-                                ? 'No jobs available yet'
-                                : 'No matching jobs found',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: workerDarkGreen,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            documents.isEmpty
-                                ? 'New jobs posted by contractors will appear here.'
-                                : 'Try changing your search or filters.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                          if (documents.isNotEmpty)
-                            TextButton(
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {
-                                  _searchQuery = '';
-                                  _locationFilter = '';
-                                  _jobTypeFilter = 'Any';
-                                  _minWage = 0;
-                                  _maxWage = 3000;
-                                });
-                              },
-                              child: const Text('Clear all filters'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                  itemCount: jobs.length,
-                  separatorBuilder: (index, item) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final document = jobs[index];
-                    final job = document.data();
-                    final title = _text(job['title'], 'Untitled job');
-                    final category = _text(job['category'], 'General work');
-                    final location = _text(
-                      job['location'],
-                      'Location not specified',
-                    );
-                    final jobType = _text(job['jobType'], 'Daily wage');
-                    final wageType = _text(job['wageType'], 'Daily');
-                    final wage = _wage(job['wageAmount']);
-                    return Card(
-                      color: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => _showJobDetails(document.id, job),
+                final appliedJobIds = (applicationSnapshot.data?.docs ?? [])
+                    .map((doc) => doc.data()['jobId']?.toString() ?? '')
+                    .where((id) => id.isNotEmpty)
+                    .toSet();
+
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _jobsStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Unable to load jobs. Please check your connection and try again.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final documents = snapshot.data?.docs ?? [];
+                    final jobs = documents
+                        .where(
+                          (doc) =>
+                              !appliedJobIds.contains(doc.id) &&
+                              _matchesJob(doc.data()),
+                        )
+                        .toList();
+                    if (jobs.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(28),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
+                              Icon(
+                                Icons.work_off_outlined,
+                                size: 60,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                documents.isEmpty
+                                    ? 'No jobs available yet'
+                                    : 'No matching jobs found',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: workerDarkGreen,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                documents.isEmpty
+                                    ? 'New jobs posted by contractors will appear here.'
+                                    : 'Try changing your search or filters.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              if (documents.isNotEmpty)
+                                TextButton(
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _locationFilter = '';
+                                      _jobTypeFilter = 'Any';
+                                      _minWage = 0;
+                                      _maxWage = 3000;
+                                    });
+                                  },
+                                  child: const Text('Clear all filters'),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      itemCount: jobs.length,
+                      separatorBuilder: (index, item) =>
+                          const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final document = jobs[index];
+                        final job = document.data();
+                        final title = _text(job['title'], 'Untitled job');
+                        final category = _text(job['category'], 'General work');
+                        final location = _text(
+                          job['location'],
+                          'Location not specified',
+                        );
+                        final jobType = _text(job['jobType'], 'Daily wage');
+                        final wageType = _text(job['wageType'], 'Daily');
+                        final wage = _wage(job['wageAmount']);
+                        return Card(
+                          color: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => _showJobDetails(document.id, job),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFDDF1E5),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(
-                                      Icons.work_outline_rounded,
-                                      color: workerGreen,
-                                      size: 26,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          title,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: workerDarkGreen,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDDF1E5),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          category,
+                                        child: const Icon(
+                                          Icons.work_outline_rounded,
+                                          color: workerGreen,
+                                          size: 26,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              title,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: workerDarkGreen,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              category,
+                                              style: TextStyle(
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(Icons.chevron_right_rounded),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.location_on_outlined,
+                                        size: 18,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          location,
                                           style: TextStyle(
-                                            color: Colors.grey.shade600,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      _FindWorkTag(label: jobType),
+                                      _FindWorkTag(
+                                        label: '₹${wage.round()} / $wageType',
+                                        highlighted: true,
+                                      ),
+                                      _FindWorkTag(
+                                        label: _genderLabel(
+                                          job['preferredGender'],
+                                        ),
+                                      ),
+                                      if (_workDates(
+                                        job['workDates'],
+                                      ).isNotEmpty)
+                                        _FindWorkTag(
+                                          label:
+                                              '${_workDates(job['workDates']).length} work date(s)',
+                                        ),
+                                    ],
+                                  ),
+                                  if (_text(
+                                    job['contactPhone'],
+                                  ).trim().isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.phone_outlined,
+                                          size: 16,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            _text(job['contactPhone']),
+                                            style: TextStyle(
+                                              color: Colors.grey.shade700,
+                                              fontSize: 13,
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  const Icon(Icons.chevron_right_rounded),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.location_on_outlined,
-                                    size: 18,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Expanded(
-                                    child: Text(
-                                      location,
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  _FindWorkTag(label: jobType),
-                                  _FindWorkTag(
-                                    label: '₹${wage.round()} / $wageType',
-                                    highlighted: true,
-                                  ),
-                                  _FindWorkTag(
-                                    label: _genderLabel(job['preferredGender']),
-                                  ),
-                                  if (_workDates(job['workDates']).isNotEmpty)
-                                    _FindWorkTag(
-                                      label:
-                                          '${_workDates(job['workDates']).length} work date(s)',
-                                    ),
-                                ],
-                              ),
-                              if (_text(
-                                job['contactPhone'],
-                              ).trim().isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.phone_outlined,
-                                      size: 16,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        _text(job['contactPhone']),
-                                        style: TextStyle(
-                                          color: Colors.grey.shade700,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
                                   ],
-                                ),
-                              ],
-                              const SizedBox(height: 12),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  'View details',
-                                  style: TextStyle(
-                                    color: workerGreen,
-                                    fontWeight: FontWeight.w600,
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'View details',
+                                      style: TextStyle(
+                                        color: workerGreen,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   },
                 );

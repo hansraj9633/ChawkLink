@@ -13,18 +13,10 @@ class WorkerHomeTab extends StatefulWidget {
 class _WorkerHomeTabState extends State<WorkerHomeTab> {
   final TextEditingController searchController = TextEditingController();
 
-  String selectedCategory = '';
   String selectedLocation = '';
   String selectedJobType = 'Any';
   double minimumWage = 0;
   double maximumWage = 3000;
-
-  final List<Map<String, dynamic>> popularWorks = [
-    {'name': 'Mason', 'icon': Icons.foundation_rounded},
-    {'name': 'Painter', 'icon': Icons.format_paint_rounded},
-    {'name': 'Electrician', 'icon': Icons.electrical_services_rounded},
-    {'name': 'Plumber', 'icon': Icons.plumbing_rounded},
-  ];
 
   @override
   void dispose() {
@@ -48,6 +40,64 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
     if (fullName.isEmpty) return 'Worker';
 
     return fullName.split(RegExp(r'\s+')).first;
+  }
+
+  bool _matchesJob(Map<String, dynamic> job) {
+    final query = searchController.text.trim().toLowerCase();
+    final title = (job['title'] ?? '').toString().toLowerCase();
+    final category = (job['category'] ?? '').toString().toLowerCase();
+    final location = (job['location'] ?? '').toString().toLowerCase();
+    final description = (job['description'] ?? '').toString().toLowerCase();
+    final jobType = (job['jobType'] ?? job['wageType'] ?? '')
+        .toString()
+        .toLowerCase();
+    final skills = (job['skills'] ?? '').toString().toLowerCase();
+
+    // Also match common variations, e.g. "mason" and "masonry".
+    final searchText =
+        '$title $category $location $description $jobType $skills';
+    final queryMatches =
+        query.isEmpty ||
+        searchText.contains(query) ||
+        (query == 'mason' && searchText.contains('masonry')) ||
+        (query == 'masonry' && searchText.contains('mason'));
+
+    final locationMatches =
+        selectedLocation.isEmpty ||
+        location.contains(selectedLocation.toLowerCase());
+    final type = selectedJobType.toLowerCase();
+    final actualType = jobType;
+    final typeMatches =
+        selectedJobType == 'Any' ||
+        actualType.contains(type) ||
+        (type == 'daily wage' &&
+            (actualType.contains('daily') || actualType.contains('wage')));
+
+    final wageValue = job['wageAmount'];
+    final wage = wageValue is num ? wageValue.toDouble() : 0.0;
+    final wageMatches =
+        (wageValue is! num) || (wage >= minimumWage && wage <= maximumWage);
+
+    // Respect the job's published application window when those fields exist.
+    final now = DateTime.now();
+    final startValue = job['startAt'];
+    final deadlineValue = job['applicationDeadline'];
+    final startAt = startValue is Timestamp ? startValue.toDate() : null;
+    final deadline = deadlineValue is Timestamp ? deadlineValue.toDate() : null;
+    final withinWindow =
+        (startAt == null || !now.isBefore(startAt)) &&
+        (deadline == null || !now.isAfter(deadline));
+
+    return queryMatches &&
+        locationMatches &&
+        typeMatches &&
+        wageMatches &&
+        withinWindow;
+  }
+
+  void _clearSearch() {
+    searchController.clear();
+    setState(() {});
   }
 
   void openFilters() {
@@ -276,10 +326,10 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                   ),
                 ),
                 const SizedBox(height: 5),
-                const Text(
-                  'Find work that fits your skills.',
-                  style: TextStyle(fontSize: 14, color: Colors.black54),
-                ),
+                // const Text(
+                //   'Find work that fits your skills.',
+                //   style: TextStyle(fontSize: 14, color: Colors.black54),
+                // ),
               ],
             );
           },
@@ -298,20 +348,22 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                 child: TextField(
                   controller: searchController,
                   textInputAction: TextInputAction.search,
-                  onSubmitted: (_) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Job search will be connected to live listings next.',
-                        ),
-                      ),
-                    );
-                  },
-                  decoration: const InputDecoration(
-                    hintText: 'Search jobs or skills',
-                    prefixIcon: Icon(Icons.search_rounded, color: workerGreen),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Search job, skill, or location',
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: workerGreen,
+                    ),
+                    suffixIcon: searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 15),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 15),
                   ),
                 ),
               ),
@@ -356,97 +408,69 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
           ),
         ],
         const SizedBox(height: 28),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Popular Works',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                  color: workerDarkGreen,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Explore all works in Find Work soon.'),
-                  ),
-                );
-              },
-              child: const Text(
-                'View all',
-                style: TextStyle(color: workerGreen),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: popularWorks.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            mainAxisExtent: 94,
+        const Text(
+          'Your Work Overview',
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.bold,
+            color: workerDarkGreen,
           ),
-          itemBuilder: (context, index) {
-            final work = popularWorks[index];
-            final isSelected = selectedCategory == work['name'];
-
-            return Material(
-              color: isSelected ? const Color(0xFFE2F2E8) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {
-                  setState(() {
-                    selectedCategory = isSelected ? '' : work['name'] as String;
-                    searchController.text = selectedCategory;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 13),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected ? workerGreen : const Color(0xFFE7ECE8),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        height: 46,
-                        width: 46,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF5ED),
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                        child: Icon(
-                          work['icon'] as IconData,
-                          color: workerGreen,
-                          size: 25,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          work['name'] as String,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: workerDarkGreen,
-                          ),
-                        ),
-                      ),
-                    ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseAuth.instance.currentUser == null
+              ? null
+              : FirebaseFirestore.instance
+                    .collection('applications')
+                    .where(
+                      'applicantId',
+                      isEqualTo: FirebaseAuth.instance.currentUser!.uid,
+                    )
+                    .snapshots(),
+          builder: (context, snapshot) {
+            var pending = 0;
+            var accepted = 0;
+            var declined = 0;
+            for (final doc in snapshot.data?.docs ?? []) {
+              final status = (doc.data()['status'] ?? '')
+                  .toString()
+                  .toLowerCase();
+              if (status == 'pending') pending++;
+              if (status == 'accepted') accepted++;
+              if (status == 'rejected' || status == 'declined') declined++;
+            }
+            return Row(
+              children: [
+                Expanded(
+                  child: _WorkOverviewCard(
+                    label: 'Pending',
+                    count: pending,
+                    icon: Icons.schedule_rounded,
+                    background: const Color(0xFFEAF2FF),
+                    foreground: const Color(0xFF315EA8),
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WorkOverviewCard(
+                    label: 'Accepted',
+                    count: accepted,
+                    icon: Icons.check_circle_outline_rounded,
+                    background: const Color(0xFFE4F4E9),
+                    foreground: workerGreen,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WorkOverviewCard(
+                    label: 'Declined',
+                    count: declined,
+                    icon: Icons.cancel_outlined,
+                    background: const Color(0xFFFCEBE8),
+                    foreground: const Color(0xFFB54738),
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -485,7 +509,22 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
               );
             }
 
-            final jobs = snapshot.data?.docs ?? [];
+            final allJobs = snapshot.data?.docs ?? [];
+            final jobs =
+                allJobs
+                    .where((document) => _matchesJob(document.data()))
+                    .toList()
+                  ..sort((a, b) {
+                    final aTime = a.data()['createdAt'];
+                    final bTime = b.data()['createdAt'];
+                    final aDate = aTime is Timestamp
+                        ? aTime.toDate()
+                        : DateTime.fromMillisecondsSinceEpoch(0);
+                    final bDate = bTime is Timestamp
+                        ? bTime.toDate()
+                        : DateTime.fromMillisecondsSinceEpoch(0);
+                    return bDate.compareTo(aDate);
+                  });
 
             if (jobs.isEmpty) {
               return Container(
@@ -496,16 +535,22 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: const Color(0xFFE7ECE8)),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.work_history_outlined,
                       size: 36,
                       color: workerGreen,
                     ),
                     SizedBox(height: 10),
                     Text(
-                      'No jobs available yet',
+                      searchController.text.trim().isNotEmpty ||
+                              selectedLocation.isNotEmpty ||
+                              selectedJobType != 'Any' ||
+                              minimumWage > 0 ||
+                              maximumWage < 3000
+                          ? 'No matching jobs found'
+                          : 'No jobs available yet',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: workerDarkGreen,
@@ -513,7 +558,13 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                     ),
                     SizedBox(height: 5),
                     Text(
-                      'New jobs posted by contractors will appear here.',
+                      searchController.text.trim().isNotEmpty ||
+                              selectedLocation.isNotEmpty ||
+                              selectedJobType != 'Any' ||
+                              minimumWage > 0 ||
+                              maximumWage < 3000
+                          ? 'Try a different keyword or adjust your filters.'
+                          : 'New jobs posted by contractors will appear here.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.black54),
                     ),
@@ -534,8 +585,9 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                 final wageType = job['wageType']?.toString() ?? 'Daily';
 
                 return Container(
+                  height: 142,
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -546,23 +598,65 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
                     children: [
                       Text(
                         title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,
+                          height: 1.15,
                           fontWeight: FontWeight.bold,
                           color: workerDarkGreen,
                         ),
                       ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 16,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '$category • $location',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
-                      Text('$category  •  $location'),
-                      const SizedBox(height: 8),
-                      Text(
-                        wage is num
-                            ? '₹${wage.toStringAsFixed(0)} / $wageType'
-                            : 'Wage not specified',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: workerGreen,
-                        ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.payments_outlined,
+                            size: 17,
+                            color: workerGreen,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              wage is num
+                                  ? '₹${wage.toStringAsFixed(0)} / $wageType'
+                                  : 'Wage not specified',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: workerGreen,
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 13,
+                            color: Colors.black38,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -572,6 +666,61 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
           },
         ),
       ],
+    );
+  }
+}
+
+class _WorkOverviewCard extends StatelessWidget {
+  const _WorkOverviewCard({
+    required this.label,
+    required this.count,
+    required this.icon,
+    required this.background,
+    required this.foreground,
+  });
+
+  final String label;
+  final int count;
+  final IconData icon;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      // Extra vertical room prevents a RenderFlex overflow on smaller screens
+      // and when the device uses a larger system font size.
+      height: 120,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: foreground, size: 21),
+          const SizedBox(height: 5),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: foreground,
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: foreground,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

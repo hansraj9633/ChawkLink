@@ -316,6 +316,12 @@ class _ContractorApplicationsTabState extends State<ContractorApplicationsTab> {
                                 'Location not specified',
                             wage: wage is num ? wage : null,
                             wageType: data['wageType']?.toString() ?? 'Daily',
+                            postedAt: data['createdAt'] is Timestamp
+                                ? (data['createdAt'] as Timestamp).toDate()
+                                : null,
+                            requiredWorkers: data['workersNeeded'] is num
+                                ? (data['workersNeeded'] as num).toInt()
+                                : 0,
                           ),
                         ),
                       );

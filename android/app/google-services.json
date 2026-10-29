@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1008611999112",
+    "project_id": "majdoor-setu",
+    "storage_bucket": "majdoor-setu.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1008611999112:android:68eabe2291e7c2d9920e3d",
+        "android_client_info": {
+          "package_name": "in.majdoorsetu.majdoor_setu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3XeZc7dmQZkXZ4JYaD1wQWpw2_mM0dZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

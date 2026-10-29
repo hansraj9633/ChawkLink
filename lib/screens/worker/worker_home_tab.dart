@@ -233,7 +233,7 @@ class _WorkerHomeTabState extends State<WorkerHomeTab> {
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'Majdoor Setu',
+                'ChawkLink',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,

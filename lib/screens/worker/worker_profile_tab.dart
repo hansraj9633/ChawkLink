@@ -179,7 +179,7 @@ class WorkerProfileTab extends StatelessWidget {
                           ),
                         ),
                         subtitle: const Text(
-                          'Sign out of your Majdoor Setu account',
+                          'Sign out of your ChawkLink account',
                         ),
                         onTap: () => _confirmLogout(context),
                       ),
@@ -412,9 +412,7 @@ class WorkerProfileTab extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Log out?'),
-        content: const Text(
-          'Are you sure you want to log out of Majdoor Setu?',
-        ),
+        content: const Text('Are you sure you want to log out of ChawkLink?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),

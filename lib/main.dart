@@ -21,7 +21,7 @@ class MajdoorSetuApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Majdoor Setu',
+      title: 'ChawkLink',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -97,7 +97,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Majdoor Setu',
+                  'ChawkLink',
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.bold,
@@ -106,7 +106,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  'Connecting Work. Building Lives.',
+                  'Reliable Work. Fair Wages.',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -147,7 +147,7 @@ class GetStartedScreen extends StatelessWidget {
                 children: [
                   const Spacer(flex: 4),
                   const Text(
-                    'Welcome to\nMajdoor Setu',
+                    'Welcome to\nChawkLink',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 27,

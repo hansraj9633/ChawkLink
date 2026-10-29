@@ -44,7 +44,7 @@ class ContractorHomeTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Majdoor Setu',
+                    'ChawkLink',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

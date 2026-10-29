@@ -177,7 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Enter your details to get started with Majdoor Setu.',
+                  'Enter your details to get started with ChawkLink.',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.black54,

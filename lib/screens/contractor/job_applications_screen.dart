@@ -36,29 +36,70 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
   Future<void> _updateStatus(String applicationId, String status) async {
     if (_updating.contains(applicationId)) return;
 
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please sign in again.')));
+      return;
+    }
+
     setState(() => _updating.add(applicationId));
 
     try {
-      await FirebaseFirestore.instance
+      final applicationRef = FirebaseFirestore.instance
           .collection('applications')
-          .doc(applicationId)
-          .update({'status': status});
+          .doc(applicationId);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(applicationRef);
+
+        if (!snapshot.exists) {
+          throw StateError('Application not found.');
+        }
+
+        final data = snapshot.data() ?? <String, dynamic>{};
+        final history = <Map<String, dynamic>>[];
+
+        final existingHistory = data['statusHistory'];
+
+        if (existingHistory is List) {
+          for (final item in existingHistory) {
+            if (item is Map) {
+              history.add(Map<String, dynamic>.from(item));
+            }
+          }
+        }
+
+        // Record every status change with its timestamp and actor.
+        history.add({
+          'status': status,
+          'changedAt': Timestamp.now(),
+          'changedBy': currentUser.uid,
+        });
+
+        transaction.update(applicationRef, {
+          'status': status,
+          'statusHistory': history,
+        });
+      });
 
       if (!mounted) return;
 
+      final message = status == 'accepted'
+          ? 'Application accepted. History saved.'
+          : status == 'rejected'
+          ? 'Application rejected. History saved.'
+          : 'Application moved to pending. History saved.';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            status == 'accepted'
-                ? 'Application accepted.'
-                : status == 'rejected'
-                ? 'Application rejected.'
-                : 'Application moved to pending.',
-          ),
-          backgroundColor: status == 'accepted'
-              ? contractorGreen
-              : status == 'rejected'
+          content: Text(message),
+          backgroundColor: status == 'rejected'
               ? Colors.red.shade700
+              : status == 'accepted'
+              ? contractorGreen
               : Colors.orange.shade800,
         ),
       );
@@ -69,6 +110,12 @@ class _JobApplicantsScreenState extends State<JobApplicantsScreen> {
         SnackBar(
           content: Text('Could not update application: ${e.message ?? e.code}'),
         ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update application: $e')),
       );
     } finally {
       if (mounted) {
